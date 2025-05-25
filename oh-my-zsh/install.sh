@@ -16,6 +16,7 @@ location() {
     fi
 }
 
+
 install() {
     if location; then
         echo "当前为国内环境，安装清华源 oh-my-zsh"
