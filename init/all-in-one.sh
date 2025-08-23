@@ -46,6 +46,12 @@ install_base() {
 
 # install oh my zsh
 install_zsh() {
+    # 检查 ~/.oh-my-zsh 目录是否存在
+    if [ -d "$HOME/.oh-my-zsh" ]; then
+        echo "oh-my-zsh 已经安装，跳过安装"
+        return
+    fi
+
     apt install -y git zsh
     if [ "$IS_CHINA" -eq 0 ]; then
         echo "当前为国内环境，安装清华源 oh-my-zsh"
@@ -83,6 +89,11 @@ check_command() {
 }
 
 install_vim() {
+    if command -v vim &>/dev/null; then
+        echo "vim 已经安装，跳过安装"
+        return
+    fi
+
     read -p "安装 vim？ [y/n]: " install
     if [ "$install" = "y" ]; then
         echo "正在安装 vim..."
@@ -96,6 +107,11 @@ install_vim() {
 }
 
 install_uv() {
+    if command -v uv &>/dev/null; then
+        echo "uv 已经安装，跳过安装"
+        return
+    fi
+
     read -p "安装 python && uv？ [y/n]: " install
     if [ "$install" = "y" ]; then
         echo "正在安装 uv..."
@@ -104,20 +120,64 @@ install_uv() {
         if [ "$IS_CHINA" -eq 0 ]; then
             pip config set global.index-url https://mirrors.ustc.edu.cn/pypi/simple
         fi
-        pip install uv
+        pip install uv --break-system-packages
     fi
 }
 
 install_docker() {
+    if command -v docker &>/dev/null; then
+        echo "docker 已经安装，跳过安装"
+        return
+    fi
+
     read -p "安装 docker？ [y/n]: " install
     if [ "$install" = "y" ]; then
         if [ "$IS_CHINA" -eq 0 ]; then
             curl -fsSL https://get.docker.com -o get-docker.sh
             DOWNLOAD_URL=https://mirrors.ustc.edu.cn/docker-ce sh get-docker.sh
+            # 设置 /etc/docker/daemon.json
+        sudo mkdir -p /etc/docker
+        sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "20m",
+    "max-file": "1"
+  }
+}
+EOF
+            # 重启 Docker 服务
+            sudo systemctl daemon-reload
+            sudo systemctl restart docker
         else
             curl -fsSL https://get.docker.com -o get-docker.sh
             sh get-docker.sh
         fi
+    fi
+}
+
+
+# 根据参数安装组件
+install_components() {
+    if [ $# -eq 0 ]; then
+        # 默认顺序执行
+        install_base
+        install_zsh
+        install_vim
+        install_uv
+        install_docker
+    else
+        # 根据传入参数执行
+        for component in "$@"; do
+            case $component in
+                install_base) install_base ;;
+                install_zsh) install_zsh ;;
+                install_vim) install_vim ;;
+                install_uv) install_uv ;;
+                install_docker) install_docker ;;
+                *) echo "无效组件: $component" ;;
+            esac
+        done
     fi
 }
 
@@ -135,17 +195,6 @@ fi
 # 更新镜像源
 replace_mirror
 
-# 安装基础镜像
-install_base
-
-# 调用 install 函数
-install_zsh
-
-
-# 交互式询问是否安装其他常用工具
-echo "是否需要安装其他常用工具？（输入 y/n）"
-
-install_vim
-install_uv
+install_components "$@"
 
 echo "初始化完成！"
