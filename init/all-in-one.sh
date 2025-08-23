@@ -95,18 +95,16 @@ install_vim() {
     fi
 }
 
-install_pyenv() {
-    read -p "安装 pyenv？ [y/n]: " install
+install_uv() {
+    read -p "安装 python && uv？ [y/n]: " install
     if [ "$install" = "y" ]; then
-        echo "正在安装 pyenv..."
-        curl -fsSL https://pyenv.run | bash
-        echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
-        echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
-        echo 'eval "$(pyenv init - zsh)"' >> ~/.zshrc
-        echo "install Suggested build environment"
-        apt update; sudo apt install make build-essential libssl-dev zlib1g-dev \
-                libbz2-dev libreadline-dev libsqlite3-dev curl git \
-                libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+        echo "正在安装 uv..."
+        # With pip.
+        apt install -y python3 python3-pip
+        if [ "$IS_CHINA" -eq 0 ]; then
+            pip config set global.index-url https://mirrors.ustc.edu.cn/pypi/simple
+        fi
+        pip install uv
     fi
 }
 
@@ -135,6 +133,6 @@ install_zsh
 echo "是否需要安装其他常用工具？（输入 y/n）"
 
 install_vim
-install_pyenv
+install_uv
 
 echo "初始化完成！"
