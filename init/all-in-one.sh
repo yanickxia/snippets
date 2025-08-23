@@ -181,7 +181,7 @@ install_docker() {
             echo "错误：无法下载 Docker 安装脚本" >&2
             return 1
         fi
-        bash -s docker --mirror Aliyun
+        bash -s get-docker.sh --mirror Aliyun
     else
         echo "使用官方源安装 Docker"
         curl -fsSL https://get.docker.com -o get-docker.sh
