@@ -176,12 +176,12 @@ install_docker() {
 
     if [ "$IS_CHINA" -eq 0 ]; then
         echo "检测到中国大陆环境，使用国内镜像源安装 Docker"
-        curl -fsSL https://get.docker.com -o get-docker.sh
+        curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh -o get-docker.sh
         if [ $? -ne 0 ]; then
             echo "错误：无法下载 Docker 安装脚本" >&2
             return 1
         fi
-        sh get-docker.sh --mirror Aliyun
+        DOWNLOAD_URL=https://mirrors.ustc.edu.cn/docker-ce sh get-docker.sh
     else
         echo "使用官方源安装 Docker"
         curl -fsSL https://get.docker.com -o get-docker.sh
@@ -254,7 +254,7 @@ install_components() {
 # 主逻辑
 main() {
     # 检查 Ubuntu 系统
-    check_ubuntu
+    # check_ubuntu
 
     # 检查网络环境
     check_location
