@@ -108,6 +108,19 @@ install_uv() {
     fi
 }
 
+install_docker() {
+    read -p "安装 docker？ [y/n]: " install
+    if [ "$install" = "y" ]; then
+        if [ "$IS_CHINA" -eq 0 ]; then
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            DOWNLOAD_URL=https://mirrors.ustc.edu.cn/docker-ce sh get-docker.sh
+        else
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sh get-docker.sh
+        fi
+    fi
+}
+
 
 # 允许用户交互式覆盖 IS_CHINA
 read -p "是否国内环境？ [y/n]: " user_input
@@ -117,7 +130,7 @@ elif [ "$user_input" = "n" ]; then
     IS_CHINA=1
 fi
 
-check_ubuntu
+# check_ubuntu
 
 # 更新镜像源
 replace_mirror
