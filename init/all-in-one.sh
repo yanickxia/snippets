@@ -125,35 +125,77 @@ install_uv() {
 }
 
 install_docker() {
+    # 检查 Docker 是否已安装
     if command -v docker &>/dev/null; then
-        echo "docker 已经安装，跳过安装"
-        return
+        echo "Docker 已安装，跳过安装"
+        return 0
     fi
 
-    read -p "安装 docker？ [y/n]: " install
-    if [ "$install" = "y" ]; then
-        if [ "$IS_CHINA" -eq 0 ]; then
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            DOWNLOAD_URL=https://mirrors.ustc.edu.cn/docker-ce sh get-docker.sh
-            # 设置 /etc/docker/daemon.json
-        sudo mkdir -p /etc/docker
-        sudo tee /etc/docker/daemon.json <<-'EOF'
+    # 提示用户是否安装 Docker
+    read -p "是否安装 Docker？ [y/n]: " install
+    if [ "$install" != "y" ] && [ "$install" != "Y" ]; then
+        echo "用户取消 Docker 安装"
+        return 1
+    fi
+
+    # 检查是否为中国大陆环境（假设 IS_CHINA 环境变量已设置）
+    if [ "${IS_CHINA:-0}" -eq 1 ]; then
+        echo "检测到中国大陆环境，使用国内镜像源安装 Docker"
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        if [ $? -ne 0 ]; then
+            echo "错误：无法下载 Docker 安装脚本"
+            return 1
+        fi
+        sh get-docker.sh
+    else
+        echo "使用官方源安装 Docker"
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        if [ $? -ne 0 ]; then
+            echo "错误：无法下载 Docker 安装脚本"
+            return 1
+        fi
+        # 使用中国科技大学镜像源加速（可选）
+        sh get-docker.sh --mirror Aliyun
+    fi
+
+    # 验证 Docker 安装是否成功
+    if ! command -v docker &>/dev/null; then
+        echo "错误：Docker 安装失败"
+        return 1
+    fi
+
+    # 配置 Docker daemon.json
+    echo "配置 Docker daemon.json"
+    sudo mkdir -p /etc/docker
+    sudo tee /etc/docker/daemon.json <<-EOF
 {
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "20m",
     "max-file": "1"
-  }
+  },
+  "registry-mirrors": [
+    "https://registry.docker-cn.com"
+  ]
 }
 EOF
-            # 重启 Docker 服务
-            sudo systemctl daemon-reload
-            sudo systemctl restart docker
-        else
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            sh get-docker.sh
-        fi
+
+    # 重启 Docker 服务
+    echo "重启 Docker 服务"
+    sudo systemctl daemon-reload
+    if ! sudo systemctl restart docker; then
+        echo "错误：Docker 服务重启失败"
+        return 1
     fi
+
+    # 验证 Docker 服务状态
+    if ! sudo systemctl is-active --quiet docker; then
+        echo "错误：Docker 服务未运行"
+        return 1
+    fi
+
+    echo "Docker 安装并配置成功"
+    return 0
 }
 
 
