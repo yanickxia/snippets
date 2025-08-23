@@ -204,10 +204,7 @@ install_docker() {
   "log-opts": {
     "max-size": "20m",
     "max-file": "1"
-  },
-  "registry-mirrors": [
-    "https://registry.docker-cn.com"
-  ]
+  }
 }
 EOF
 
