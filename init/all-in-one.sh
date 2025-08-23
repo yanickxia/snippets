@@ -176,7 +176,7 @@ install_docker() {
 
     if [ "$IS_CHINA" -eq 0 ]; then
         echo "检测到中国大陆环境，使用国内镜像源安装 Docker"
-        curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh -o get-docker.sh
+        curl -fsSL curl -fsSL https://ams-cn-beijing.tos-cn-beijing.volces.com/scripts/get-docker.sh -o get-docker.sh
         if [ $? -ne 0 ]; then
             echo "错误：无法下载 Docker 安装脚本" >&2
             return 1
