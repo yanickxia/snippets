@@ -235,7 +235,7 @@ install_docker() {
     echo "--- 正在安装 Docker... ---"
     if [ "$IS_CHINA" -eq 0 ]; then
         echo "检测到中国大陆环境，使用国内镜像源安装 Docker"
-        curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
+        curl -fsSL https://gitea.home.yanick.site:6443/yanick/snippets/raw/branch/master/docker/get-docker.sh | bash -s docker --mirror Aliyun
         if [ $? -ne 0 ]; then
             echo "错误：Docker 安装失败" >&2
             return 1
