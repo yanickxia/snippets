@@ -10,6 +10,29 @@ die() {
 	exit 1
 }
 
+usage() {
+	cat <<'EOF'
+用法:
+  get-ssh-from-bitwarden.sh [-h]
+  get-ssh-from-bitwarden.sh            交互式模式，按提示登录、选择保存类型与路径
+  get-ssh-from-bitwarden.sh -n -p <主密码> -i <名称或ID> [-o <路径>] [-k p|P|a]
+
+说明:
+  - 默认保存类型: a (全部)
+  - 默认路径: ~/.ssh/id_rsa (公钥保存为同路径 .pub)
+  - 非交互模式需先 bw login
+  - 私钥权限 0600, 公钥权限 0644
+
+参数:
+  -h            显示帮助
+  -n            非交互模式
+  -p <主密码>   Bitwarden 主密码, 用于解锁
+  -i <名称或ID> 条目名称或 ID, 支持搜索与选择
+  -o <路径>     输出文件路径, 默认 ~/.ssh/id_rsa
+  -k p|P|a      保存类型: p 私钥, P 公钥, a 全部; 默认 a
+EOF
+}
+
 expand_path() {
 	case "$1" in
 		"~") printf '%s' "$HOME" ;;
@@ -24,8 +47,9 @@ item_cli=""
 output_cli=""
 kind_cli=""
 
-while getopts "ni:p:o:k:" opt; do
+while getopts "hni:p:o:k:" opt; do
 	case "$opt" in
+		h) usage; exit 0 ;;
 		n) non_interactive=1 ;;
 		i) item_cli="$OPTARG" ;;
 		p) master_password="$OPTARG" ;;
@@ -107,9 +131,13 @@ fi
 if [ -n "$item_cli" ]; then
 	item="$item_cli"
 else
-	printf "请输入 Bitwarden 项目名称或ID: "
-	read -r item || die "未输入项目名称或ID"
-	[ -n "$item" ] || die "未输入项目名称或ID"
+	if [ "$non_interactive" -eq 1 ]; then
+		die "缺少条目参数 (-i)"
+	else
+		printf "请输入 Bitwarden 项目名称或ID: "
+		read -r item || die "未输入项目名称或ID"
+		[ -n "$item" ] || die "未输入项目名称或ID"
+	fi
 fi
 
 default_output="$HOME/.ssh/id_rsa"
