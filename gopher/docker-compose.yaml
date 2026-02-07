@@ -1,7 +1,0 @@
-services:
-  server:
-    image: yanickxia/gopher
-    ports:
-      - "8443:8443"
-    command:
-      ["-mode", "server", "-addr", ":8443", "-password", "hV2O7RYYJrjyWv"]

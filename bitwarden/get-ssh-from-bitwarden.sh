@@ -18,32 +18,76 @@ expand_path() {
 	esac
 }
 
+non_interactive=0
+master_password=""
+item_cli=""
+output_cli=""
+kind_cli=""
+
+while getopts "ni:p:o:k:" opt; do
+	case "$opt" in
+		n) non_interactive=1 ;;
+		i) item_cli="$OPTARG" ;;
+		p) master_password="$OPTARG" ;;
+		o) output_cli="$OPTARG" ;;
+		k) kind_cli="$OPTARG" ;;
+	esac
+done
+
 command_exists bw || die "bw CLI not found. Install it first."
 
 status="$(bw status 2>/dev/null | tr -d ' \n')"
 case "$status" in
 	*'"status":"unauthenticated"'*)
-		echo "Bitwarden 未登录，开始登录"
-		printf "邮箱 (直接回车进入交互式登录): "
-		read -r bw_email || bw_email=""
-		if [ -n "$bw_email" ]; then
-			bw login "$bw_email" || die "登录失败"
+		if [ "$non_interactive" -eq 1 ]; then
+			die "bw 未登录，请先执行 bw login"
 		else
-			bw login || die "登录失败"
+			echo "Bitwarden 未登录，开始登录"
+			printf "邮箱 (直接回车进入交互式登录): "
+			read -r bw_email || bw_email=""
+			if [ -n "$bw_email" ]; then
+				bw login "$bw_email" || die "登录失败"
+			else
+				bw login || die "登录失败"
+			fi
+			status="$(bw status 2>/dev/null | tr -d ' \n')"
 		fi
-		status="$(bw status 2>/dev/null | tr -d ' \n')"
 		;;
 	*'"status":"locked"'*)
 		if [ -z "${BW_SESSION:-}" ]; then
-			BW_SESSION="$(bw unlock --raw)"
-			[ -n "$BW_SESSION" ] || die "failed to unlock vault"
+			if [ "$non_interactive" -eq 1 ]; then
+				[ -n "$master_password" ] || die "缺少密码参数 (-p)"
+				BW_SESSION="$(bw unlock --raw "$master_password" 2>/dev/null || true)"
+				if [ -z "$BW_SESSION" ]; then
+					BW_SESSION="$(bw unlock "$master_password" --raw 2>/dev/null || true)"
+				fi
+				if [ -z "$BW_SESSION" ]; then
+					BW_SESSION="$(printf '%s' "$master_password" | bw unlock --raw 2>/dev/null || true)"
+				fi
+				[ -n "$BW_SESSION" ] || die "解锁失败，请检查密码"
+			else
+				BW_SESSION="$(bw unlock --raw)"
+				[ -n "$BW_SESSION" ] || die "failed to unlock vault"
+			fi
 			export BW_SESSION
 		fi
 		;;
 	*'"status":"unlocked"'*)
 		if [ -z "${BW_SESSION:-}" ]; then
-			BW_SESSION="$(bw unlock --raw)"
-			[ -n "$BW_SESSION" ] || die "failed to get session token"
+			if [ "$non_interactive" -eq 1 ]; then
+				[ -n "$master_password" ] || die "缺少密码参数 (-p)"
+				BW_SESSION="$(bw unlock --raw "$master_password" 2>/dev/null || true)"
+				if [ -z "$BW_SESSION" ]; then
+					BW_SESSION="$(bw unlock "$master_password" --raw 2>/dev/null || true)"
+				fi
+				if [ -z "$BW_SESSION" ]; then
+					BW_SESSION="$(printf '%s' "$master_password" | bw unlock --raw 2>/dev/null || true)"
+				fi
+				[ -n "$BW_SESSION" ] || die "解锁失败，请检查密码"
+			else
+				BW_SESSION="$(bw unlock --raw)"
+				[ -n "$BW_SESSION" ] || die "failed to get session token"
+			fi
 			export BW_SESSION
 		fi
 		;;
@@ -60,17 +104,29 @@ else
 	die "python is required to parse bw output"
 fi
 
-printf "请输入 Bitwarden 项目名称或ID: "
-read -r item || die "未输入项目名称或ID"
-[ -n "$item" ] || die "未输入项目名称或ID"
+if [ -n "$item_cli" ]; then
+	item="$item_cli"
+else
+	printf "请输入 Bitwarden 项目名称或ID: "
+	read -r item || die "未输入项目名称或ID"
+	[ -n "$item" ] || die "未输入项目名称或ID"
+fi
 
 default_output="$HOME/.ssh/id_rsa"
-printf "保存路径 [默认: %s]: " "$default_output"
-read -r output_path || output_path=""
-if [ -z "$output_path" ]; then
-	output="$default_output"
+if [ -n "$output_cli" ]; then
+	output="$(expand_path "$output_cli")"
 else
-	output="$(expand_path "$output_path")"
+	if [ "$non_interactive" -eq 1 ]; then
+		output="$default_output"
+	else
+		printf "保存路径 [默认: %s]: " "$default_output"
+		read -r output_path || output_path=""
+		if [ -z "$output_path" ]; then
+			output="$default_output"
+		else
+			output="$(expand_path "$output_path")"
+		fi
+	fi
 fi
 
 item_json="$(bw get item "$item" 2>/dev/null || true)"
@@ -97,12 +153,16 @@ output_dir="$(dirname "$output")"
 mkdir -p "$output_dir"
 
 if [ -e "$output" ]; then
-	printf "%s 已存在，是否覆盖? [y/N]: " "$output"
-	read -r overwrite || overwrite=""
-	case "$overwrite" in
-		y|Y) ;;
-		*) die "已取消" ;;
-	esac
+	if [ "$non_interactive" -eq 1 ]; then
+		:
+	else
+		printf "%s 已存在，是否覆盖? [y/N]: " "$output"
+		read -r overwrite || overwrite=""
+		case "$overwrite" in
+			y|Y) ;;
+			*) die "已取消" ;;
+		esac
+	fi
 fi
 
 umask 077
@@ -111,8 +171,15 @@ ssh_private="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; d=json.
 ssh_public="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sshKey",{}).get("publicKey",""))')"
 
 if [ -n "$ssh_private" ] || [ -n "$ssh_public" ]; then
-	printf "保存内容选择 [p=私钥, P=公钥, a=全部，默认 p]: "
-	read -r kind || kind=""
+	if [ "$non_interactive" -eq 1 ]; then
+		kind="${kind_cli:-a}"
+	else
+		printf "保存内容选择 [p=私钥, P=公钥, a=全部，默认 a]: "
+		read -r kind || kind=""
+		if [ -z "$kind" ]; then
+			kind="a"
+		fi
+	fi
 	case "$kind" in
 		P)
 			[ -n "$ssh_public" ] || die "该条目不含公钥"
@@ -120,12 +187,16 @@ if [ -n "$ssh_private" ] || [ -n "$ssh_public" ]; then
 				output="$HOME/.ssh/id_rsa.pub"
 			fi
 			if [ -e "$output" ]; then
-				printf "%s 已存在，是否覆盖? [y/N]: " "$output"
-				read -r overwrite_pub || overwrite_pub=""
-				case "$overwrite_pub" in
-					y|Y) ;;
-					*) die "已取消" ;;
-				esac
+				if [ "$non_interactive" -eq 1 ]; then
+					:
+				else
+					printf "%s 已存在，是否覆盖? [y/N]: " "$output"
+					read -r overwrite_pub || overwrite_pub=""
+					case "$overwrite_pub" in
+						y|Y) ;;
+						*) die "已取消" ;;
+					esac
+				fi
 			fi
 			printf '%s\n' "$ssh_public" > "$output"
 			;;
@@ -148,12 +219,16 @@ if [ -n "$ssh_private" ] || [ -n "$ssh_public" ]; then
 			[ -n "$ssh_private" ] || die "该条目不含私钥"
 			[ -n "$ssh_public" ] || die "该条目不含公钥"
 			if [ -e "$private_path" ] || [ -e "$pub_path" ]; then
-				printf "%s 或 %s 已存在，是否覆盖? [y/N]: " "$private_path" "$pub_path"
-				read -r overwrite_both || overwrite_both=""
-				case "$overwrite_both" in
-					y|Y) ;;
-					*) die "已取消" ;;
-				esac
+				if [ "$non_interactive" -eq 1 ]; then
+					:
+				else
+					printf "%s 或 %s 已存在，是否覆盖? [y/N]: " "$private_path" "$pub_path"
+					read -r overwrite_both || overwrite_both=""
+					case "$overwrite_both" in
+						y|Y) ;;
+						*) die "已取消" ;;
+					esac
+				fi
 			fi
 			printf '%s\n' "$ssh_private" > "$private_path"
 			printf '%s\n' "$ssh_public" > "$pub_path"
