@@ -49,45 +49,68 @@ done
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 os="$(uname -s)"
 if [ "$os" = "Darwin" ]; then
+	echo "检测到平台: macOS"
 	if ! command_exists docker; then
+		echo "未检测到 docker 命令，尝试安装 Docker Desktop"
 		if command_exists brew; then
 			brew install --cask docker || true
+		else
+			echo "未检测到 Homebrew，跳过自动安装 Docker Desktop"
 		fi
+	else
+		echo "已检测到 docker: $(docker --version 2>/dev/null || echo 未知版本)"
 	fi
+	echo "启动 Docker Desktop (如果已安装)"
 	open -a Docker 2>/dev/null || true
 	i=0
+	echo "等待 Docker 就绪..."
 	while [ $i -lt 30 ]; do
 		if docker info >/dev/null 2>&1; then
+			echo "Docker 已就绪"
 			break
 		fi
 		sleep 2
 		i=$((i+1))
 	done
 fi
+	echo "当前平台: $os，暂不处理 Docker 安装"
 if ! command_exists zsh; then
 	if command_exists brew; then
 		brew install zsh || true
+	echo "未检测到 zsh，尝试安装"
 	fi
 fi
 if [ -x "$(command -v zsh)" ]; then
+else
+	echo "已检测到 zsh: $(command -v zsh)"
 	if [ "$SHELL" != "$(command -v zsh)" ]; then
 		chsh -s "$(command -v zsh)" || true
 	fi
+		echo "切换默认 shell 为 zsh"
 fi
+	else
+		echo "默认 shell 已是 zsh: $SHELL"
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
 	RUNZSH=no CHSH=yes KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 fi
+	echo "未检测到 oh-my-zsh，开始安装"
 zsh -ic "exit" || true
+	echo "oh-my-zsh 安装完成"
+else
+	echo "oh-my-zsh 已安装: $HOME/.oh-my-zsh"
 if ! command_exists bw; then
 	sh "$script_dir/bitwarden/install-bw.sh"
 fi
+	echo "未检测到 bw CLI，开始安装"
 ssh_script="$script_dir/bitwarden/get-ssh-from-bitwarden.sh"
+else
+	echo "bw CLI 已安装: $(bw --version 2>/dev/null || echo 未知版本)"
 if [ "$non_interactive" -eq 1 ]; then
 	[ -n "$master_password" ] || die "缺少参数 -p"
 	[ -n "$item_cli" ] || die "缺少参数 -i"
 	args="-n -p" 
 	set -- "$ssh_script" -n -p "$master_password" -i "$item_cli"
-	if [ -n "$output_cli" ]; then
+	echo "以非交互模式获取 SSH 密钥: item=$item_cli kind=${kind_cli:-a} output=${output_cli:-~/.ssh/id_rsa}"
 		set -- "$@" -o "$(expand_path "$output_cli")"
 	fi
 	if [ -n "$kind_cli" ]; then
@@ -95,5 +118,8 @@ if [ "$non_interactive" -eq 1 ]; then
 	fi
 	sh "$@"
 else
+	sh "$ssh_script"
+fi
+	echo "以交互模式运行 SSH 获取脚本"
 	sh "$ssh_script"
 fi
