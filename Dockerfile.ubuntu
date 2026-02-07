@@ -1,0 +1,6 @@
+FROM ubuntu:22.04
+RUN sed -i -E \
+  -e 's@//(archive|security).ubuntu.com@//mirrors.ustc.edu.cn@g' \
+  -e 's@//ports.ubuntu.com@//mirrors.ustc.edu.cn@g' \
+  /etc/apt/sources.list
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git sudo gpg sudo vim unzip
