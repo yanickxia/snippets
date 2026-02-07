@@ -73,9 +73,25 @@ else
 	output="$(expand_path "$output_path")"
 fi
 
-item_json="$(bw get item "$item")" || die "item not found: $item"
-item_id="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')"
-[ -n "$item_id" ] || die "unable to resolve item id"
+item_json="$(bw get item "$item" 2>/dev/null || true)"
+if [ -z "$item_json" ]; then
+	items_json="$(bw list items --search "$item")" || die "无法搜索到条目: $item"
+	count="$(printf '%s' "$items_json" | "$py_cmd" -c 'import json,sys; a=json.load(sys.stdin); print(len(a))')"
+	[ "$count" -gt 0 ] || die "未找到匹配条目: $item"
+	if [ "$count" -gt 1 ]; then
+		printf '%s' "$items_json" | "$py_cmd" -c 'import json,sys; a=json.load(sys.stdin); [print(f"{i+1}) {it.get(\"name\",\"\")}\t{it.get(\"id\",\"\")}") for i,it in enumerate(a)]'
+		printf "选择条目编号: "
+		read -r sel || die "未选择条目"
+		item_id="$(printf '%s' "$items_json" | "$py_cmd" -c 'import json,sys; a=json.load(sys.stdin); import sys; idx=int(sys.argv[1])-1; print(a[idx].get("id","") if 0<=idx<len(a) else "")' "$sel")"
+		[ -n "$item_id" ] || die "选择无效"
+	else
+		item_id="$(printf '%s' "$items_json" | "$py_cmd" -c 'import json,sys; a=json.load(sys.stdin); print(a[0].get("id",""))')"
+	fi
+	item_json="$(bw get item "$item_id")" || die "获取条目失败"
+else
+	item_id="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')"
+fi
+[ -n "$item_id" ] || die "无法解析条目 ID"
 
 output_dir="$(dirname "$output")"
 mkdir -p "$output_dir"
@@ -91,9 +107,62 @@ fi
 
 umask 077
 
-notes="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; d=json.load(sys.stdin); n=d.get("notes") or ""; print(n)')"
-if [ -n "$notes" ]; then
-	printf '%s' "$notes" > "$output"
+ssh_private="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sshKey",{}).get("privateKey",""))')"
+ssh_public="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sshKey",{}).get("publicKey",""))')"
+
+if [ -n "$ssh_private" ] || [ -n "$ssh_public" ]; then
+	printf "保存内容选择 [p=私钥, P=公钥, a=全部，默认 p]: "
+	read -r kind || kind=""
+	case "$kind" in
+		P)
+			[ -n "$ssh_public" ] || die "该条目不含公钥"
+			if [ "$output" = "$HOME/.ssh/id_rsa" ]; then
+				output="$HOME/.ssh/id_rsa.pub"
+			fi
+			if [ -e "$output" ]; then
+				printf "%s 已存在，是否覆盖? [y/N]: " "$output"
+				read -r overwrite_pub || overwrite_pub=""
+				case "$overwrite_pub" in
+					y|Y) ;;
+					*) die "已取消" ;;
+				esac
+			fi
+			printf '%s\n' "$ssh_public" > "$output"
+			;;
+		a)
+			if [ "$output" = "$HOME/.ssh/id_rsa" ]; then
+				private_path="$HOME/.ssh/id_rsa"
+				pub_path="$HOME/.ssh/id_rsa.pub"
+			else
+				case "$output" in
+					*.pub)
+						pub_path="$output"
+						private_path="${output%*.pub}"
+						;;
+					*)
+						private_path="$output"
+						pub_path="$output.pub"
+						;;
+				esac
+			fi
+			[ -n "$ssh_private" ] || die "该条目不含私钥"
+			[ -n "$ssh_public" ] || die "该条目不含公钥"
+			if [ -e "$private_path" ] || [ -e "$pub_path" ]; then
+				printf "%s 或 %s 已存在，是否覆盖? [y/N]: " "$private_path" "$pub_path"
+				read -r overwrite_both || overwrite_both=""
+				case "$overwrite_both" in
+					y|Y) ;;
+					*) die "已取消" ;;
+				esac
+			fi
+			printf '%s\n' "$ssh_private" > "$private_path"
+			printf '%s\n' "$ssh_public" > "$pub_path"
+			;;
+		*)
+			[ -n "$ssh_private" ] || die "该条目不含私钥"
+			printf '%s\n' "$ssh_private" > "$output"
+			;;
+	esac
 else
 	att_count="$(printf '%s' "$item_json" | "$py_cmd" -c 'import json,sys; d=json.load(sys.stdin); at=d.get("attachments") or []; print(len(at))')"
 	if [ "$att_count" -gt 0 ]; then
@@ -111,13 +180,18 @@ else
 			bw get attachment "$attachment_id" --itemid "$item_id" --output "$output"
 		fi
 	else
-		die "该 Item 不包含 notes 或附件"
+		die "该 Item 不包含 sshKey 字段或附件"
 	fi
 fi
 
-case "$output" in
-	*.pub) chmod 0644 "$output" ;;
-	*) chmod 0600 "$output" ;;
-esac
-
-echo "已保存到 $output"
+if [ "$kind" = "a" ]; then
+	chmod 0600 "$private_path"
+	chmod 0644 "$pub_path"
+	echo "已保存到 $private_path 和 $pub_path"
+else
+	case "$output" in
+		*.pub) chmod 0644 "$output" ;;
+		*) chmod 0600 "$output" ;;
+	esac
+	echo "已保存到 $output"
+fi
