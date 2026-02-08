@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 set -euo pipefail
 
 usage() {
@@ -41,9 +41,9 @@ fi
 
 repo="${repo_arg:-${DOTFILES_GIT_URL:-}}"
 if [ -z "$repo" ]; then
-  if [ -t 0 ]; then
-    printf "请输入 dotfiles Git 仓库地址: "
-    read -r repo
+  if [ -r /dev/tty ]; then
+    printf "请输入 dotfiles Git 仓库地址: " >/dev/tty
+    read -r repo </dev/tty
   else
     echo "非交互环境且未提供仓库地址 (-r 或 DOTFILES_GIT_URL)，退出。"
     exit 1
