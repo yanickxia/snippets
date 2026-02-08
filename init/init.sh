@@ -29,13 +29,7 @@ if command -v chezmoi >/dev/null 2>&1; then
   echo "chezmoi 已安装: $(chezmoi --version)"
 else
   install_dir="/usr/local/bin"
-  if [ -w "$install_dir" ]; then
-    sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "/usr/local/bin"
-  else
-    mkdir -p "$HOME/.local/bin"
-    sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
-    export PATH="$HOME/.local/bin:$PATH"
-  fi
+  sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "/usr/local/bin"
   echo "chezmoi 安装完成: $(chezmoi --version)"
 fi
 
