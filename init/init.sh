@@ -68,7 +68,7 @@ else
     rm -rf "$source_path"
   fi
   echo "初始化 dotfiles 仓库: $repo"
-  chezmoi init --source "$repo"
+  chezmoi init "$repo"
 fi
 
 echo "应用 dotfiles"
